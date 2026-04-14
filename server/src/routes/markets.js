@@ -66,17 +66,19 @@ router.get('/:id', (req, res) => {
 
 router.post('/', authMiddleware, (req, res) => {
   try {
-    const { question, description, closes_at } = req.body;
+    const { question, description, category, closes_at } = req.body;
     const fee_percentage = 10;
+    const validCategories = ['sports', 'politics', 'business', 'entertainment', 'regulatory', 'geopolitics', 'kenya', 'international', 'crypto', 'news'];
+    const marketCategory = validCategories.includes(category) ? category : 'international';
     
     if (!question) {
       return res.status(400).json({ error: 'Question required' });
     }
 
     const result = req.db.prepare(`
-      INSERT INTO markets (creator_id, question, description, fee_percentage, closes_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(req.userId, question, description, fee_percentage, closes_at || null);
+      INSERT INTO markets (creator_id, question, description, category, fee_percentage, closes_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(req.userId, question, description, marketCategory, fee_percentage, closes_at || null);
 
     const market = req.db.prepare('SELECT * FROM markets WHERE id = ?').get(result.lastInsertRowid);
     res.json({ market });

@@ -35,6 +35,7 @@ async function initDb() {
       creator_id INTEGER NOT NULL,
       question TEXT NOT NULL,
       description TEXT,
+      category TEXT DEFAULT 'international',
       fee_percentage REAL DEFAULT 10,
       yes_pool REAL DEFAULT 0,
       no_pool REAL DEFAULT 0,
@@ -45,6 +46,10 @@ async function initDb() {
       FOREIGN KEY (creator_id) REFERENCES users(id)
     )
   `);
+
+  try {
+    db.run('ALTER TABLE markets ADD COLUMN category TEXT DEFAULT "international"');
+  } catch (e) {}
 
   db.run(`
     CREATE TABLE IF NOT EXISTS bets (
@@ -70,6 +75,25 @@ async function initDb() {
       amount REAL NOT NULL,
       description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS mpesa_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      amount REAL NOT NULL,
+      phone TEXT,
+      status TEXT DEFAULT 'pending',
+      reference TEXT,
+      checkout_request_id TEXT,
+      mpesa_receipt TEXT,
+      mpesa_response TEXT,
+      error_message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
       FOREIGN KEY (user_id) REFERENCES users(id)
     )
   `);
