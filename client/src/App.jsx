@@ -12,6 +12,8 @@ import Transactions from './pages/Transactions';
 import News from './pages/News';
 import Trending from './pages/Trending';
 import Crypto from './pages/Crypto';
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 import './index-pesapredict.css';
 
 function Navbar() {
@@ -91,6 +93,8 @@ function AppRoutes() {
         <Route path="/news" element={<News />} />
         <Route path="/trending" element={<Trending />} />
         <Route path="/crypto" element={<Crypto />} />
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
       </Routes>
     </>
   );
@@ -102,6 +106,20 @@ export default function App() {
       <AuthProvider>
         <div className="app">
           <AppRoutes />
+          <footer style={{
+            textAlign: 'center',
+            padding: '20px',
+            marginTop: '40px',
+            borderTop: '1px solid var(--border)',
+            color: 'var(--text-muted)',
+            fontSize: '0.875rem'
+          }}>
+            <div style={{marginBottom: '8px'}}>
+              <Link to="/terms" style={{color: 'var(--text-secondary)', margin: '0 12px'}}>Terms</Link>
+              <Link to="/privacy" style={{color: 'var(--text-secondary)', margin: '0 12px'}}>Privacy</Link>
+            </div>
+            <div>© 2026 GANJI. All rights reserved.</div>
+          </footer>
         </div>
       </AuthProvider>
     </BrowserRouter>

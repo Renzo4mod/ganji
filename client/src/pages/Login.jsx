@@ -110,6 +110,12 @@ export default function Login() {
           </button>
         </form>
 
+        <div style={{marginTop: '16px', fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center'}}>
+          By continuing, you agree to our{' '}
+          <a href="/terms" target="_blank" style={{color: '#00e676'}}>Terms</a> and{' '}
+          <a href="/privacy" target="_blank" style={{color: '#00e676'}}>Privacy Policy</a>
+        </div>
+
         {!isLogin && (
           <p style={{ marginTop: '20px', color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>
             New accounts start with <strong style={{color: '#00e676'}}>10,000 KSH</strong> demo balance!
