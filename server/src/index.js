@@ -26,14 +26,23 @@ const db = getDb();
 console.log('Checking markets...');
 try {
   const existing = await db.prepare('SELECT COUNT(*) as count FROM markets').get();
-  console.log('Market count:', existing.count);
+  console.log('Market count:', existing?.count || 0);
+  
   if (!existing || existing.count === 0) {
+    const users = await db.prepare('SELECT COUNT(*) as count FROM users').get();
+    console.log('User count:', users?.count || 0);
+    
+    if (!users || users.count === 0) {
+      console.log('Creating default user...');
+      await db.prepare(`INSERT INTO users (username, email, password_hash, balance) VALUES ('admin', 'admin@ganji.ke', 'demo', 100000)`).run();
+    }
+    
     console.log('Seeding markets...');
     const { default: seedMarkets } = await import('./seed-markets.js');
     await seedMarkets();
   }
 } catch (err) {
-  console.error('Error checking markets:', err);
+  console.error('Error checking markets:', err.message);
 }
 
 try {

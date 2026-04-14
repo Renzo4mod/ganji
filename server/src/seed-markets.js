@@ -283,13 +283,18 @@ async function seedMarkets() {
   const db = getDb();
   
   const existing = await db.prepare('SELECT COUNT(*) as count FROM markets').get();
-  if (existing.count > 0) {
+  if (existing && existing.count > 0) {
     console.log(`Database already has ${existing.count} markets. Skipping seed.`);
     return;
   }
 
   const user = await db.prepare('SELECT id FROM users ORDER BY id ASC LIMIT 1').get();
   const creatorId = user?.id || 1;
+
+  if (!creatorId) {
+    console.log('No creator found, skipping seed.');
+    return;
+  }
 
   for (const market of markets) {
     await db.prepare(`
