@@ -18,7 +18,7 @@ function authMiddleware(req, res, next) {
   }
 }
 
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const { market_id, amount, outcome } = req.body;
     
@@ -34,12 +34,12 @@ router.post('/', authMiddleware, (req, res) => {
       return res.status(400).json({ error: 'Outcome must be yes or no' });
     }
 
-    const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+    const user = await req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
     if (user.balance < amount) {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
 
-    const market = req.db.prepare('SELECT * FROM markets WHERE id = ?').get(market_id);
+    const market = await req.db.prepare('SELECT * FROM markets WHERE id = ?').get(market_id);
     if (!market) return res.status(404).json({ error: 'Market not found' });
     
     if (market.status !== 'open') {
@@ -55,23 +55,23 @@ router.post('/', authMiddleware, (req, res) => {
     const potentialPayout = betAmount * odds;
 
     const updatePool = outcome === 'yes' ? 'yes_pool' : 'no_pool';
-    req.db.prepare(`UPDATE markets SET ${updatePool} = ${updatePool} + ? WHERE id = ?`)
+    await req.db.prepare(`UPDATE markets SET ${updatePool} = ${updatePool} + ? WHERE id = ?`)
       .run(betAmount, market_id);
 
-    req.db.prepare(`
+    await req.db.prepare(`
       INSERT INTO bets (user_id, market_id, amount, outcome, odds, fee, potential_payout)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(req.userId, market_id, amount, outcome, odds, fee, potentialPayout);
 
-    req.db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?')
+    await req.db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?')
       .run(amount, req.userId);
 
-    req.db.prepare(`
+    await req.db.prepare(`
       INSERT INTO transactions (user_id, type, amount, description)
       VALUES (?, 'bet', ?, ?)
     `).run(req.userId, -amount, `Bet on: ${market.question}`);
 
-    const updatedUser = req.db.prepare('SELECT balance FROM users WHERE id = ?').get(req.userId);
+    const updatedUser = await req.db.prepare('SELECT balance FROM users WHERE id = ?').get(req.userId);
     
     res.json({ 
       message: 'Bet placed',
@@ -83,9 +83,9 @@ router.post('/', authMiddleware, (req, res) => {
   }
 });
 
-router.get('/history', authMiddleware, (req, res) => {
+router.get('/history', authMiddleware, async (req, res) => {
   try {
-    const bets = req.db.prepare(`
+    const bets = await req.db.prepare(`
       SELECT b.*, m.question as market_question, m.status as market_status, m.resolution
       FROM bets b
       JOIN markets m ON b.market_id = m.id

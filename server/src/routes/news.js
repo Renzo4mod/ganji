@@ -120,7 +120,7 @@ router.get('/create-bets', async (req, res) => {
       .filter(article => article.title && article.title !== '[Removed]')
       .filter(article => isPositiveStory(article.title, article.description));
 
-    const existingMarkets = req.db.prepare('SELECT question FROM markets').all();
+    const existingMarkets = await req.db.prepare('SELECT question FROM markets').all();
     const existingQuestions = new Set(existingMarkets.map(m => m.question.toLowerCase()));
 
     const newMarkets = [];
@@ -134,7 +134,7 @@ router.get('/create-bets', async (req, res) => {
 
       const question = title.length > 200 ? title.substring(0, 197) + '...' : title;
       
-      req.db.prepare(`
+      await req.db.prepare(`
         INSERT INTO markets (creator_id, question, description, category, fee_percentage)
         VALUES (?, ?, ?, 'news', 10)
       `).run(creatorId, question, article.description || `Source: ${article.source?.name}`);

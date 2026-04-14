@@ -13,7 +13,7 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'All fields required' });
     }
 
-    const existing = req.db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
+    const existing = await req.db.prepare('SELECT id FROM users WHERE email = ? OR username = ?').get(email, username);
     if (existing) {
       return res.status(400).json({ error: 'User already exists' });
     }
@@ -38,7 +38,7 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    const user = req.db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const user = await req.db.prepare('SELECT * FROM users WHERE email = ?').get(email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -59,7 +59,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   try {
     const auth = req.headers.authorization;
     if (!auth) return res.status(401).json({ error: 'No token' });
@@ -67,7 +67,7 @@ router.get('/me', (req, res) => {
     const token = auth.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
     
-    const user = req.db.prepare('SELECT id, username, email, balance, created_at FROM users WHERE id = ?')
+    const user = await req.db.prepare('SELECT id, username, email, balance, created_at FROM users WHERE id = ?')
       .get(decoded.userId);
     
     if (!user) return res.status(404).json({ error: 'User not found' });

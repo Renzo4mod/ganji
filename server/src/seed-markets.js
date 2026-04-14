@@ -279,20 +279,20 @@ const markets = [
   }
 ];
 
-async function seedMarkets() {
+async async function seedMarkets() {
   const db = getDb();
   
-  const existing = db.prepare('SELECT COUNT(*) as count FROM markets').get();
+  const existing = await db.prepare('SELECT COUNT(*) as count FROM markets').get();
   if (existing.count > 0) {
     console.log(`Database already has ${existing.count} markets. Skipping seed.`);
     return;
   }
 
-  const user = db.prepare('SELECT id FROM users ORDER BY id ASC LIMIT 1').get();
+  const user = await db.prepare('SELECT id FROM users ORDER BY id ASC LIMIT 1').get();
   const creatorId = user?.id || 1;
 
   for (const market of markets) {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO markets (creator_id, question, description, category, fee_percentage, closes_at)
       VALUES (?, ?, ?, ?, 10, ?)
     `).run(creatorId, market.question, market.description, market.category, market.closes_at);

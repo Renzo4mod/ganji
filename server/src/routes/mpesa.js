@@ -1,6 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { getDb } from '../models/db.js';
+import { getDb, pool } from '../models/db.js';
 import { stkPush, queryTransaction, b2cPayment } from '../services/mpesa.js';
 
 const router = express.Router();
@@ -50,15 +50,15 @@ router.post('/deposit', authMiddleware, async (req, res) => {
     
     const orderId = `KSH-${req.userId}-${Date.now()}`;
     
-    req.db.prepare(`
-      INSERT INTO mpesa_transactions (user_id, type, amount, phone, status, reference, created_at)
-      VALUES (?, 'deposit', ?, ?, 'pending', ?, datetime('now'))
+    await req.db.prepare(`
+      INSERT INTO mpesa_transactions (user_id, type, amount, phone, status, reference)
+      VALUES (?, 'deposit', ?, ?, 'pending', ?)
     `).run(req.userId, amount, phone, orderId);
     
     const mpesaResponse = await stkPush(cleanPhone, amount, orderId);
     
     if (mpesaResponse.ResponseCode === '0') {
-      req.db.prepare(`
+      await req.db.prepare(`
         UPDATE mpesa_transactions SET checkout_request_id = ?, mpesa_response = ? WHERE reference = ?
       `).run(mpesaResponse.CheckoutRequestID, JSON.stringify(mpesaResponse), orderId);
       
@@ -69,7 +69,7 @@ router.post('/deposit', authMiddleware, async (req, res) => {
         orderId: orderId
       });
     } else {
-      req.db.prepare(`UPDATE mpesa_transactions SET status = 'failed', error_message = ? WHERE reference = ?`)
+      await req.db.prepare(`UPDATE mpesa_transactions SET status = 'failed', error_message = ? WHERE reference = ?`)
         .run(mpesaResponse.ResponseDescription, orderId);
       
       res.status(400).json({
@@ -82,8 +82,7 @@ router.post('/deposit', authMiddleware, async (req, res) => {
   }
 });
 
-router.post('/callback', (req, res) => {
-  const db = getDb();
+router.post('/callback', async (req, res) => {
   const { Body } = req.body;
   
   if (!Body || !Body.stkCallback) {
@@ -94,35 +93,35 @@ router.post('/callback', (req, res) => {
   const resultCode = callback.ResultCode;
   const checkoutRequestId = callback.CheckoutRequestID;
   const reference = callback.Reference;
+  const db = getDb();
   
   if (resultCode === 0) {
     const items = callback.CallbackMetadata?.Item || [];
     const amount = items.find(i => i.Name === 'Amount')?.Value;
     const receipt = items.find(i => i.Name === 'MpesaReceiptNumber')?.Value;
     const phone = items.find(i => i.Name === 'PhoneNumber')?.Value;
-    const transactionDate = items.find(i => i.Name === 'TransactionDate')?.Value;
     
-    db.prepare(`
+    await db.prepare(`
       UPDATE mpesa_transactions 
       SET status = 'completed', 
           mpesa_receipt = ?, 
-          completed_at = datetime('now')
+          completed_at = NOW()
       WHERE reference = ? AND type = 'deposit'
     `).run(receipt, reference);
     
     if (amount) {
-      const tx = db.prepare(`SELECT user_id FROM mpesa_transactions WHERE reference = ?`).get(reference);
+      const tx = await db.prepare(`SELECT user_id FROM mpesa_transactions WHERE reference = ?`).get(reference);
       if (tx) {
-        db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, tx.user_id);
+        await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, tx.user_id);
         
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO transactions (user_id, type, amount, description)
           VALUES (?, 'deposit', ?, ?)
         `).run(tx.user_id, amount, `M-Pesa deposit: ${receipt}`);
       }
     }
   } else {
-    db.prepare(`
+    await db.prepare(`
       UPDATE mpesa_transactions 
       SET status = 'failed', error_message = ?
       WHERE checkout_request_id = ? OR reference = ?
@@ -132,9 +131,9 @@ router.post('/callback', (req, res) => {
   res.json({ ResultCode: 0, ResultDesc: 'Accepted' });
 });
 
-router.post('/b2c-callback/result', (req, res) => {
-  const db = getDb();
+router.post('/b2c-callback/result', async (req, res) => {
   const { Body } = req.body;
+  const db = getDb();
   
   if (!Body || !Body.B2CResults) {
     return res.status(400).json({ error: 'Invalid callback' });
@@ -145,19 +144,19 @@ router.post('/b2c-callback/result', (req, res) => {
   const reference = output?.ParameterValue;
   
   if (result.ResultCode === 0) {
-    db.prepare(`
-      UPDATE mpesa_transactions SET status = 'completed', completed_at = datetime('now') WHERE reference = ?
+    await db.prepare(`
+      UPDATE mpesa_transactions SET status = 'completed', completed_at = NOW() WHERE reference = ?
     `).run(reference);
   } else {
-    db.prepare(`
+    await db.prepare(`
       UPDATE mpesa_transactions 
       SET status = 'failed', error_message = ? 
       WHERE reference = ?
     `).run(result.Result?.ResultDesc, reference);
     
-    const tx = db.prepare(`SELECT user_id, amount FROM mpesa_transactions WHERE reference = ?`).get(reference);
+    const tx = await db.prepare(`SELECT user_id, amount FROM mpesa_transactions WHERE reference = ?`).get(reference);
     if (tx) {
-      db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(tx.amount, tx.user_id);
+      await db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(tx.amount, tx.user_id);
     }
   }
   
@@ -197,21 +196,21 @@ router.post('/withdraw', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'Invalid phone number. Use 07xxxxxxxx or 712xxxxxx' });
     }
     
-    const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
+    const user = await req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId);
     if (user.balance < amount) {
       return res.status(400).json({ error: 'Insufficient balance' });
     }
     
-    req.db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(amount, req.userId);
+    await req.db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(amount, req.userId);
     
     const reference = `WDL-${req.userId}-${Date.now()}`;
     
-    req.db.prepare(`
-      INSERT INTO mpesa_transactions (user_id, type, amount, phone, status, reference, created_at)
-      VALUES (?, 'withdrawal', ?, ?, 'processing', ?, datetime('now'))
+    await req.db.prepare(`
+      INSERT INTO mpesa_transactions (user_id, type, amount, phone, status, reference)
+      VALUES (?, 'withdrawal', ?, ?, 'processing', ?)
     `).run(req.userId, amount, phone, reference);
     
-    req.db.prepare(`
+    await req.db.prepare(`
       INSERT INTO transactions (user_id, type, amount, description)
       VALUES (?, 'withdrawal_pending', ?, ?)
     `).run(req.userId, -amount, `Withdrawal request: ${reference}`);
@@ -227,19 +226,17 @@ router.post('/withdraw', authMiddleware, async (req, res) => {
           reference: reference
         });
       } else {
-        req.db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, req.userId);
-        req.db.prepare(`UPDATE mpesa_transactions SET status = 'failed', error_message = ? WHERE reference = ?`)
+        await req.db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, req.userId);
+        await req.db.prepare(`UPDATE mpesa_transactions SET status = 'failed', error_message = ? WHERE reference = ?`)
           .run(mpesaResponse.ResponseDescription, reference);
-        req.db.prepare(`UPDATE transactions SET description = ? WHERE description LIKE ?`)
-          .run(`Withdrawal failed: ${mpesaResponse.ResponseDescription}`, `%${reference}%`);
         
         res.status(400).json({
           error: mpesaResponse.ResponseDescription || 'Failed to initiate withdrawal'
         });
       }
     } catch (mpesaError) {
-      req.db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, req.userId);
-      req.db.prepare(`UPDATE mpesa_transactions SET status = 'failed', error_message = ? WHERE reference = ?`)
+      await req.db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(amount, req.userId);
+      await req.db.prepare(`UPDATE mpesa_transactions SET status = 'failed', error_message = ? WHERE reference = ?`)
         .run(mpesaError.message, reference);
       
       res.status(500).json({ error: 'M-Pesa service unavailable' });
@@ -254,7 +251,7 @@ router.get('/status/:checkoutRequestId', authMiddleware, async (req, res) => {
   try {
     const { checkoutRequestId } = req.params;
     
-    const transaction = req.db.prepare(`
+    const transaction = await req.db.prepare(`
       SELECT * FROM mpesa_transactions WHERE checkout_request_id = ? AND user_id = ?
     `).get(checkoutRequestId, req.userId);
     
@@ -307,9 +304,9 @@ router.get('/status/:checkoutRequestId', authMiddleware, async (req, res) => {
   }
 });
 
-router.get('/history', authMiddleware, (req, res) => {
+router.get('/history', authMiddleware, async (req, res) => {
   try {
-    const transactions = req.db.prepare(`
+    const transactions = await req.db.prepare(`
       SELECT * FROM mpesa_transactions 
       WHERE user_id = ? 
       ORDER BY created_at DESC 

@@ -79,20 +79,20 @@ function getFutureTime(minutes) {
   return date.toISOString().slice(0, 16);
 }
 
-async function seedCryptoMarkets() {
+async async function seedCryptoMarkets() {
   const db = getDb();
   
-  const existing = db.prepare('SELECT COUNT(*) as count FROM markets WHERE category = ?').get('crypto');
+  const existing = await db.prepare('SELECT COUNT(*) as count FROM markets WHERE category = ?').get('crypto');
   if (existing.count > 0) {
     console.log(`Database already has ${existing.count} crypto markets. Skipping.`);
     return;
   }
 
-  const user = db.prepare('SELECT id FROM users ORDER BY id ASC LIMIT 1').get();
+  const user = await db.prepare('SELECT id FROM users ORDER BY id ASC LIMIT 1').get();
   const creatorId = user?.id || 1;
 
   for (const market of cryptoMarkets) {
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO markets (creator_id, question, description, category, fee_percentage, closes_at)
       VALUES (?, ?, ?, ?, 10, ?)
     `).run(creatorId, market.question, market.description, market.category, market.closes_at);

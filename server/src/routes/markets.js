@@ -18,7 +18,7 @@ function authMiddleware(req, res, next) {
   }
 }
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   try {
     const { status, limit = 50 } = req.query;
     let query = 'SELECT m.*, u.username as creator_name FROM markets m JOIN users u ON m.creator_id = u.id';
@@ -32,16 +32,16 @@ router.get('/', (req, res) => {
     query += ' ORDER BY m.created_at DESC LIMIT ?';
     params.push(parseInt(limit));
     
-    const markets = req.db.prepare(query).all(...params);
+    const markets = await req.db.prepare(query).all(...params);
     res.json({ markets });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const market = req.db.prepare(`
+    const market = await req.db.prepare(`
       SELECT m.*, u.username as creator_name,
         (SELECT SUM(amount) FROM bets WHERE market_id = m.id AND outcome = 'yes') as yes_volume,
         (SELECT SUM(amount) FROM bets WHERE market_id = m.id AND outcome = 'no') as no_volume,
@@ -64,7 +64,7 @@ router.get('/:id', (req, res) => {
   }
 });
 
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
   try {
     const { question, description, category, closes_at } = req.body;
     const fee_percentage = 10;
@@ -75,23 +75,23 @@ router.post('/', authMiddleware, (req, res) => {
       return res.status(400).json({ error: 'Question required' });
     }
 
-    const result = req.db.prepare(`
+    const result = await req.db.prepare(`
       INSERT INTO markets (creator_id, question, description, category, fee_percentage, closes_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(req.userId, question, description, marketCategory, fee_percentage, closes_at || null);
 
-    const market = req.db.prepare('SELECT * FROM markets WHERE id = ?').get(result.lastInsertRowid);
+    const market = await req.db.prepare('SELECT * FROM markets WHERE id = ?').get(result.lastInsertRowid);
     res.json({ market });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-router.post('/:id/resolve', authMiddleware, (req, res) => {
+router.post('/:id/resolve', authMiddleware, async (req, res) => {
   try {
     const { resolution } = req.body;
     
-    const market = req.db.prepare('SELECT * FROM markets WHERE id = ?').get(req.params.id);
+    const market = await req.db.prepare('SELECT * FROM markets WHERE id = ?').get(req.params.id);
     if (!market) return res.status(404).json({ error: 'Market not found' });
     
     if (market.creator_id !== req.userId) {
@@ -107,7 +107,7 @@ router.post('/:id/resolve', authMiddleware, (req, res) => {
     const totalFees = totalPool * (market.fee_percentage / 100);
     const payoutPool = totalPool - totalFees;
 
-    const winningBets = req.db.prepare(`
+    const winningBets = await req.db.prepare(`
       SELECT * FROM bets WHERE market_id = ? AND outcome = ?
     `).all(market.id, winningOutcome);
 
@@ -116,25 +116,25 @@ router.post('/:id/resolve', authMiddleware, (req, res) => {
     if (winningPool > 0) {
       for (const bet of winningBets) {
         const payout = bet.amount * (payoutPool / winningPool);
-        req.db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?')
+        await req.db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?')
           .run(payout, bet.user_id);
         
-        req.db.prepare(`
+        await req.db.prepare(`
           INSERT INTO transactions (user_id, type, amount, description)
           VALUES (?, 'win', ?, ?)
         `).run(bet.user_id, payout, `Won bet on: ${market.question}`);
       }
     }
 
-    req.db.prepare(`
+    await req.db.prepare(`
       UPDATE markets SET status = 'resolved', resolution = ? WHERE id = ?
     `).run(resolution, market.id);
 
     const creatorEarnings = totalFees;
-    req.db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?')
+    await req.db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?')
       .run(creatorEarnings, market.creator_id);
     
-    req.db.prepare(`
+    await req.db.prepare(`
       INSERT INTO transactions (user_id, type, amount, description)
       VALUES (?, 'fee_income', ?, ?)
     `).run(market.creator_id, creatorEarnings, `Fees from market: ${market.question}`);
