@@ -20,15 +20,24 @@ app.use(express.urlencoded({ extended: true }));
 await initDb();
 
 const db = getDb();
-const existing = await db.prepare('SELECT COUNT(*) as count FROM markets').get();
-if (existing.count === 0) {
-  const { default: seedMarkets } = await import('./seed-markets.js');
-  await seedMarkets();
+console.log('Checking markets...');
+try {
+  const existing = await db.prepare('SELECT COUNT(*) as count FROM markets').get();
+  console.log('Market count:', existing.count);
+  if (!existing || existing.count === 0) {
+    console.log('Seeding markets...');
+    const { default: seedMarkets } = await import('./seed-markets.js');
+    await seedMarkets();
+  }
+} catch (err) {
+  console.error('Error checking markets:', err);
 }
 
-{
+try {
   const { default: seedCryptoMarkets } = await import('./seed-crypto.js');
   await seedCryptoMarkets();
+} catch (err) {
+  console.error('Error seeding crypto markets:', err);
 }
 
 app.use((req, res, next) => {

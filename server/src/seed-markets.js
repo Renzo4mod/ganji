@@ -279,7 +279,7 @@ const markets = [
   }
 ];
 
-async async function seedMarkets() {
+async function seedMarkets() {
   const db = getDb();
   
   const existing = await db.prepare('SELECT COUNT(*) as count FROM markets').get();
