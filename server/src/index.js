@@ -13,6 +13,9 @@ import cryptoRoutes from './routes/crypto.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+console.log('Starting server...');
+console.log('DATABASE_URL set:', !!process.env.DATABASE_URL);
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
